@@ -30,16 +30,21 @@ def matrix_multiplication_kernel(
     BLOCK_SIZE_K: tl.constexpr,
     GROUP_SIZE_M: tl.constexpr,
 ):
+    # --- Boiler plate Block Swizzling Code ---
     pid = tl.program_id(axis=0)
+    # num tiles in each dimension
     num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
     num_pid_k = tl.cdiv(K, BLOCK_SIZE_K)
+    # num groups in the M dimension
     num_pid_in_group = GROUP_SIZE_M * num_pid_k
     group_id = pid // num_pid_in_group
     first_pid_m = group_id * GROUP_SIZE_M
+    # grp size usually 2,4 or 8, but can be smaller at the end of the grid
     group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
+    # tile indices
     pid_m = first_pid_m + (pid % group_size_m)
     pid_k = (pid % num_pid_in_group) // group_size_m
-
+    # --- End Boiler plate Block Swizzling Code ---
 
     a_block_ptr = tl.make_block_ptr(
         base=a_ptr,
