@@ -21,32 +21,6 @@ config = [
     reset_to_zero=['output'],
 )
 @triton.jit
-def naive_softmax_kernel(input, output, N, BLOCK_SIZE: tl.constexpr):
-    pid = tl.program_id(0)
-    block_start = pid*BLOCK_SIZE
-    offset = block_start+tl.arange(0,BLOCK_SIZE)
-    mask = offset<N
-    x = tl.load(input+offset,mask=mask,other=float("-inf")).to(tl.float32)
-
-    # Find global max(x)
-    max = tl.max(x,axis=0)
-
-    # Stable exp(x-max(x))
-    stable_exp = tl.exp(x-max)
-
-    #Global_sum(stable(exp(x)))
-    sum = tl.sum(stable_exp,axis=0)
-
-    #stable(exp(x)) / sum(stable(exp(x)))
-    y=stable_exp/sum
-    tl.store(output+offset,y,mask=mask)
-
-@triton.autotune(
-    configs=config,
-    key=['N'],
-    reset_to_zero=['output'],
-)
-@triton.jit
 def softmax_1D_kernel(input, output, N, BLOCK_SIZE: tl.constexpr):
     #calculate global max(x)
     global_max = float("-inf")
@@ -101,14 +75,6 @@ def online_softmax(input, output, N, BLOCK_SIZE: tl.constexpr):
         y=stable_exp/global_sum
         tl.store(output+offset,y,mask=mask)
 
-
-def naive_solve(input: torch.Tensor, output: torch.Tensor, N: int):
-    grid = lambda meta: (triton.cdiv(N,meta['BLOCK_SIZE']),)
-    naive_softmax_kernel[grid](
-        input,output,N
-    )
-    return output
-
 def solve_1D(input: torch.Tensor, output: torch.Tensor, N: int):
     grid = (1,)
     softmax_1D_kernel[grid](
@@ -123,7 +89,7 @@ def online_solve(input: torch.Tensor, output: torch.Tensor, N: int):
     )
     return output
 
-def benchmark(N=2048):
+def benchmark(N):
     torch.backends.cuda.matmul.allow_tf32 = True
     dtypes = {
         "float32": (torch.float32, 4),
@@ -133,22 +99,22 @@ def benchmark(N=2048):
         print(f"\n=== dtype: {dtype_name} ===")
         inp = torch.randn(N,device='cuda',dtype=dtype)
         ref = torch.nn.functional.softmax(inp.float(),dim=0)
-        naive_out = torch.zeros_like(inp)
+        
         out_1D = torch.zeros_like(inp)
         out_online = torch.zeros_like(inp)
-        res_naive = naive_solve(inp,naive_out.clone(),N)
+        
         res_1D = solve_1D(inp,out_1D.clone(),N)
         res_online = online_solve(inp,out_online.clone(),N)
-        print(f"Max Error (Naive): {torch.max(torch.abs(ref - res_naive.float()))}")
+        
         print(f"Max Error (1D): {torch.max(torch.abs(ref - res_1D.float()))}")
         print(f"Max Error (Online): {torch.max(torch.abs(ref - res_online.float()))}")
         total_bytes = 2*N*elem_size
         torch_ms = triton.testing.do_bench(lambda: torch.nn.functional.softmax(inp,dim=0))
-        naive_ms = triton.testing.do_bench(lambda: naive_solve(inp,naive_out,N))
+        
         ms_1D = triton.testing.do_bench(lambda: solve_1D(inp,out_1D,N))
         ms_online = triton.testing.do_bench(lambda: online_solve(inp,out_online,N))
         print(f"Bandwidth (Torch): {total_bytes/(torch_ms*1e-3)/1e9:.2f} GB/s")
-        print(f"Bandwidth (Naive): {total_bytes/(naive_ms*1e-3)/1e9:.2f} GB/s")
+        
         print(f"Bandwidth (1D): {total_bytes/(ms_1D*1e-3)/1e9:.2f} GB/s")
         print(f"Bandwidth (Online): {total_bytes/(ms_online*1e-3)/1e9:.2f} GB/s")
 if __name__ == "__main__":
