@@ -159,14 +159,25 @@ def solve(
     )
 
 def main():
-    #Parameters
-    input = torch.randn(1024, 1024, device='cuda', dtype=torch.float32)
-    kernel = torch.randn(3, 3, device='cuda', dtype=torch.float32)
-    output = torch.empty(1022, 1022, device='cuda', dtype=torch.float32)
-    triton_ms = triton.testing.do_bench(lambda: solve(input, kernel, output, 1024, 1024, 3, 3))
-    torch_ms = triton.testing.do_bench(lambda: torch.nn.functional.conv2d(input.unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0), padding=0))
-    print(f"Torch 2D convolution kernel time: {torch_ms:.2f} ms,dtype: {input.dtype}, shape: {input.shape}")
-    print(f"Triton 2D convolution kernel time: {triton_ms:.2f} ms,dtype: {input.dtype}, shape: {input.shape}")
+    H_in, W_in = 1024, 1024
+    K_h, K_w = 3, 3
+    H_out = H_in - K_h + 1
+    W_out = W_in - K_w + 1
+
+    x = torch.randn(H_in * W_in, device="cuda", dtype=torch.float32)
+    k = torch.randn(K_h * K_w, device="cuda", dtype=torch.float32)
+    out = torch.empty(H_out * W_out, device="cuda", dtype=torch.float32)
+
+    for _ in range(10):
+        solve(x, k, out, H_in, W_in, K_h, K_w)
+    torch.cuda.synchronize()
+
+    # 4. Profile loop with NVTX / PyTorch Profiler range markers
+    torch.cuda.nvtx.range_push("conv_profile_region")
+    for _ in range(50):
+        solve(x, k, out, H_in, W_in, K_h, K_w)
+    torch.cuda.synchronize()
+    torch.cuda.nvtx.range_pop()
 
 if __name__ == "__main__":
     main()
