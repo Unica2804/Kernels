@@ -110,12 +110,12 @@ def main():
     c = torch.empty(BATCH, M, N, device='cuda', dtype=torch.bfloat16)
 
     c_triton = solve(a, b, c, BATCH, M, N, K)
-    c_torch = torch.bmm(a.to(torch.float32), b.to(torch.float32)).to(torch.bfloat16)
+    c_torch = torch.bmm(a, b)
 
     print("Difference:", torch.max(torch.abs(c_triton - c_torch)))
 
     triton_ms = triton.testing.do_bench(lambda: solve(a, b, c, BATCH, M, N, K))
-    torch_ms = triton.testing.do_bench(lambda: torch.bmm(a.to(torch.float32), b.to(torch.float32)).to(torch.bfloat16))
+    torch_ms = triton.testing.do_bench(lambda: torch.bmm(a, b))
     print(f"Triton time: {triton_ms:.2f} ms")
     print(f"Torch time: {torch_ms:.2f} ms")
 
