@@ -26,7 +26,6 @@ def MOE_grad(
     # load slice boudaries for the current group
     s = tl.load(group_offsets_ptr + pid_g, mask=pid_g < G, other=0)
     e = tl.load(group_offsets_ptr + pid_g + 1, mask=pid_g < G, other=0)
-    tokens = e-s
 
     acc = tl.zeros((BK, BN), dtype=tl.float32)
     offs_k = pid_k * BK + tl.arange(0, BK)
