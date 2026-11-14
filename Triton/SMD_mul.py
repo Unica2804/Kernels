@@ -12,9 +12,9 @@ B tile is transposed in-register for the dot product. The thread-block
 launch order uses a 2D swizzle (tl.swizzle2d) to improve L2 locality.
 """
 
+import torch
 import triton
 import triton.language as tl
-import torch
 
 
 @triton.jit
