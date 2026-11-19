@@ -2,9 +2,10 @@
 Grouped Query Attention (GQA) implementation in Triton.
 """
 
+import torch
 import triton
 import triton.language as tl
-import torch
+
 
 @triton.jit
 def gqa_kernel(
